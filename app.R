@@ -1,46 +1,80 @@
 #
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
+# This is a Shiny web application.
 #
 
 library(shiny)
+library(scidb)
 
-# Define UI for application that draws a histogram
-ui <- fluidPage(# Application title
-  titlePanel("Old Faithful Geyser Data"),
-  
-  # Sidebar with a slider input for number of bins
-  sidebarLayout(sidebarPanel(
-    sliderInput(
-      "bins",
-      "Number of bins:",
-      min = 1,
-      max = 50,
-      value = 30
-    )
+# Define UI for application
+ui <- fluidPage(
+  # Application title
+  titlePanel("SciDB Shim Authentication Demo"),
+
+  # Sidebar with inputs
+  sidebarLayout(
+    sidebarPanel(
+      h4("SciDB Connection"),
+      textInput("protocol", label = "Protocol", value = "https"),
+      textInput("host", label = "Host", value = "127.0.0.1"),
+      textInput("port", label = "Port", value = "8083"),
+      textInput("username", label = "Username", value = ""),
+      passwordInput("password", label = "Password", value = ""),
+      actionButton("connect", "Connect"),
+      a(href = ".", target = "_blank", "New Instance")
+    ),
+
+    # Show a log
+    mainPanel(verbatimTextOutput("log"))
   ),
-  
-  # Show a plot of the generated distribution
-  mainPanel(plotOutput("distPlot"))))
 
-# Define server logic required to draw a histogram
-server <- function(input, output) {
-  output$distPlot <- renderPlot({
-    # generate bins based on input$bins from ui.R
-    x    <- faithful[, 2]
-    bins <- seq(min(x), max(x), length.out = input$bins + 1)
-    
-    # draw the histogram with the specified number of bins
-    hist(x,
-         breaks = bins,
-         col = 'darkgray',
-         border = 'white')
+  includeScript("www/sessionid.js")
+)
+
+# Define server logic
+server <- function(input, output, session) {
+  output$log <- renderPrint({
+    print(paste("connect:", input$connect))
+
+    if (input$connect > 0) {
+      protocol <- isolate(input$protocol)
+      host <- isolate(input$host)
+      port <- isolate(input$port)
+      username <- isolate(input$username)
+      password <- isolate(input$password)
+
+      print(paste("protocol:", protocol))
+      print(paste("host:", host))
+      print(paste("port:", port))
+      print(paste("username:", username))
+      print(paste("password: ", if (password != "") "PASSWORD_PROVIDED" else ""))
+      print("scidbconnect...")
+      db <- tryCatch(
+        scidbconnect(
+          protocol = protocol,
+          host = host,
+          port = port,
+          username = username,
+          password = password
+        ),
+        error = function(e) {
+          print("error...")
+          print(e)
+          NULL
+        }
+      )
+      if (!is.null(db)) {
+        print(paste("new sessionid:", attr(db, "connection")$session))
+        print("ls...")
+        print(ls(db))
+
+        session$sendCustomMessage("sessionid", attr(db, "connection")$session)
+      }
+    }
+
+    print(paste("found sessionid:", input$sessionid))
   })
 }
+
 
 # Run the application
 shinyApp(ui = ui, server = server)
